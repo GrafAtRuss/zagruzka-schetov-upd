@@ -9,7 +9,7 @@ try { chcp 65001 > $null } catch {}
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SettingsFile = Join-Path $Root "установка.настройки.json"
 $ExtName = "ЗагрузкаСчетовУПД"
-$Cfe = Join-Path $Root "ЗагрузкаСчетовУПД_1.0.11.cfe"
+$Cfe = Join-Path $Root "ЗагрузкаСчетовУПД_1.0.12.cfe"
 
 function Write-Title([string]$Text) {
     Write-Host ""
