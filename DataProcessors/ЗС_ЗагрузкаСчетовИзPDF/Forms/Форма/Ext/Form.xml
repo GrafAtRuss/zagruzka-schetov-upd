@@ -19,6 +19,11 @@
 					<DefaultButton>true</DefaultButton>
 					<ExtendedTooltip name="ВыбратьФайлыРасширеннаяПодсказка" id="3"/>
 				</Button>
+				<Button name="ВыбратьКаталог" id="90">
+					<Type>CommandBarButton</Type>
+					<CommandName>Form.Command.ВыбратьКаталог</CommandName>
+					<ExtendedTooltip name="ВыбратьКаталогРасширеннаяПодсказка" id="91"/>
+				</Button>
 				<Button name="СоздатьДокументы" id="4">
 					<Type>CommandBarButton</Type>
 					<CommandName>Form.Command.СоздатьДокументы</CommandName>
@@ -35,7 +40,7 @@
 			<Title formatted="false">
 				<v8:item>
 					<v8:lang>ru</v8:lang>
-					<v8:content>PDF счета покупателю или УПД. Будут созданы счет на оплату покупателю и УПД: реализация услуг и счет-фактура, статус 1. Доступно только роли «Загрузка счетов и УПД из PDF».</v8:content>
+					<v8:content>Можно выбрать сразу много PDF или целый каталог: счета покупателю и УПД. По каждому файлу создаются счет на оплату и УПД (реализация и счет-фактура). Уже существующие номер, дата и покупатель повторно не проводятся. Доступно только роли «Загрузка счетов и УПД из PDF».</v8:content>
 				</v8:item>
 			</Title>
 			<ContextMenu name="ПодсказкаКонтекстноеМеню" id="9"/>
@@ -300,13 +305,19 @@
 	<Commands>
 		<Command name="ВыбратьФайлы" id="73">
 			<Title>
-				<v8:item><v8:lang>ru</v8:lang><v8:content>Выбрать PDF</v8:content></v8:item>
+				<v8:item><v8:lang>ru</v8:lang><v8:content>Несколько PDF</v8:content></v8:item>
 			</Title>
 			<Action>ВыбратьФайлы</Action>
 		</Command>
+		<Command name="ВыбратьКаталог" id="76">
+			<Title>
+				<v8:item><v8:lang>ru</v8:lang><v8:content>Каталог PDF</v8:content></v8:item>
+			</Title>
+			<Action>ВыбратьКаталог</Action>
+		</Command>
 		<Command name="СоздатьДокументы" id="74">
 			<Title>
-				<v8:item><v8:lang>ru</v8:lang><v8:content>Создать документы</v8:content></v8:item>
+				<v8:item><v8:lang>ru</v8:lang><v8:content>Создать все</v8:content></v8:item>
 			</Title>
 			<Action>СоздатьДокументы</Action>
 		</Command>
