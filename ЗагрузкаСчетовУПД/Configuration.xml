@@ -4,31 +4,31 @@
 		<InternalInfo>
 			<xr:ContainedObject>
 				<xr:ClassId>9cd510cd-abfc-11d4-9434-004095e12fc7</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-111111111111</xr:ObjectId>
+				<xr:ObjectId>c4a81e2b-7d55-4f10-9a63-1e8b0c4d2a71</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>9fcd25a0-4822-11d4-9414-008048da11f9</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-222222222222</xr:ObjectId>
+				<xr:ObjectId>d15b2f90-6c44-4e81-b372-8a9c1d0e5f63</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>e3687481-0a87-462c-a166-9f34594f9bba</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-333333333333</xr:ObjectId>
+				<xr:ObjectId>e26c3a01-5b33-4d70-a261-7b8d2e1f6a54</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>9de14907-ec23-4a07-96f0-85521cb6b53b</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-444444444444</xr:ObjectId>
+				<xr:ObjectId>f37d4b12-4a22-4c6f-9160-6a7e3f2a5b45</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>51f2d5d8-ea4d-4064-8892-82951750031e</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-555555555555</xr:ObjectId>
+				<xr:ObjectId>a48e5c23-3911-4b5e-805f-597d4a3b6c36</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>e68182ea-4237-4383-967f-90c1e3370bc7</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-666666666666</xr:ObjectId>
+				<xr:ObjectId>b59f6d34-2800-4a4d-7f4e-486c5b4c7d27</xr:ObjectId>
 			</xr:ContainedObject>
 			<xr:ContainedObject>
 				<xr:ClassId>fb282519-d103-4dd3-bc12-cb271d631dfc</xr:ClassId>
-				<xr:ObjectId>a1b2c3d4-e5f6-4711-8a22-777777777777</xr:ObjectId>
+				<xr:ObjectId>c6a07e45-17ff-494c-6e3d-375b6c5d8e18</xr:ObjectId>
 			</xr:ContainedObject>
 		</InternalInfo>
 		<Properties>
@@ -42,7 +42,7 @@
 			</Synonym>
 			<Comment>Счета, выставленные заказчикам, и УПД из PDF. Раздел в левом меню и отдельная роль.</Comment>
 			<ConfigurationExtensionPurpose>AddOn</ConfigurationExtensionPurpose>
-			<KeepMappingToExtendedConfigurationObjectsByIDs>true</KeepMappingToExtendedConfigurationObjectsByIDs>
+			<KeepMappingToExtendedConfigurationObjectsByIDs>false</KeepMappingToExtendedConfigurationObjectsByIDs>
 			<NamePrefix>ЗС_</NamePrefix>
 			<ConfigurationExtensionCompatibilityMode>Version8_3_21</ConfigurationExtensionCompatibilityMode>
 			<DefaultRunMode>ManagedApplication</DefaultRunMode>
@@ -51,7 +51,8 @@
 			</UsePurposes>
 			<ScriptVariant>Russian</ScriptVariant>
 			<Vendor/>
-			<Version>1.0.0.1</Version>
+			<Version>1.0.1</Version>
+			<DefaultLanguage>Language.Русский</DefaultLanguage>
 			<BriefInformation>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -65,6 +66,7 @@
 		</Properties>
 		<ChildObjects>
 			<Language>Русский</Language>
+			<CommonPicture>ЗС_Раздел</CommonPicture>
 			<Subsystem>ЗС_ЗагрузкаДокументов</Subsystem>
 			<Role>ЗС_ЗагрузкаСчетовИзPDF</Role>
 			<CommonModule>ЗС_ЗагрузкаСчетовСервер</CommonModule>

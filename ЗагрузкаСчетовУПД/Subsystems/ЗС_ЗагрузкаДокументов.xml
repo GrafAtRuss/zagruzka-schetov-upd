@@ -19,6 +19,10 @@
 					<v8:content>Счета покупателям и УПД из PDF</v8:content>
 				</v8:item>
 			</Explanation>
+			<Picture>
+				<xr:Ref>CommonPicture.ЗС_Раздел</xr:Ref>
+				<xr:LoadTransparent>false</xr:LoadTransparent>
+			</Picture>
 			<Content>
 				<xr:Item xsi:type="xr:MDObjectRef">DataProcessor.ЗС_ЗагрузкаСчетовИзPDF</xr:Item>
 			</Content>

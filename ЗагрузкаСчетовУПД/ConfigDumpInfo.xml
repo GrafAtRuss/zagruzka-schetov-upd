@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ConfigDumpInfo xmlns="http://v8.1c.ru/8.3/xcf/dumpinfo" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="Hierarchical" version="2.20">
 	<ConfigVersions>
-		<Metadata name="Configuration.ЗагрузкаСчетовУПД" id="6c1e0a44-8b2d-4f55-9a10-3d7e5c2b90a1" configVersion="9626f9ab896039d36a8a89b655f4ab1bb230c309"/>
+		<Metadata name="Configuration.ЗагрузкаСчетовУПД.ManagedApplicationModule" id="6c1e0a44-8b2d-4f55-9a10-3d7e5c2b90a1" configVersion="870532216817294896b0b3bdf5883d7d282e85f7"/>
 		<Metadata name="Language.Русский" id="b7e2c4d1-5a60-4c88-9f13-2d0a6e8b41c5" configVersion="76225881160076d526afb3220cb90ac272c0543b"/>
-		<Metadata name="Subsystem.ЗС_ЗагрузкаДокументов" id="1f9a3c70-6e24-4b51-8d02-7c5a1e4b90d6" configVersion="871df20c3c353930602389716f099b2e78b145e1"/>
+		<Metadata name="CommonPicture.ЗС_Раздел" id="8e4c1a72-0b59-4d63-91f8-6c2a5e7d0b14" configVersion="744c7899272ca4d9f182d5964a3211c21441e9d5"/>
+		<Metadata name="Subsystem.ЗС_ЗагрузкаДокументов" id="1f9a3c70-6e24-4b51-8d02-7c5a1e4b90d6" configVersion="9b97ad673fafcb868de4ea7165d2f1d7055d52ab"/>
+		<Metadata name="Subsystem.ЗС_ЗагрузкаДокументов.CommandInterface" id="1f9a3c70-6e24-4b51-8d02-7c5a1e4b90d6" configVersion="49222aa23e0eb5026d56e1e218ef0400439ecc03"/>
 		<Metadata name="Role.ЗС_ЗагрузкаСчетовИзPDF" id="4a8d2e15-0c73-4f96-b1a4-9e6c3d0f72b8" configVersion="80c4b397ef910396a6f51c13abd1decaa0487204"/>
-		<Metadata name="Role.ЗС_ЗагрузкаСчетовИзPDF.Rights" id="d0e1f2a3-b4c5-4d6e-8f70-112233445566" configVersion="58a2514857601e5337fbbe74a65c9b6ce763d5f6"/>
 		<Metadata name="CommonModule.ЗС_ЗагрузкаСчетовСервер" id="9b0c5e27-3a14-4d68-8f50-1c7a2b6e45d3" configVersion="5ac5991f256098ec7f65a7bb194af8b685688077"/>
-		<Metadata name="CommonModule.ЗС_ЗагрузкаСчетовСервер.Module" id="aa11bb22-cc33-4d44-8e55-66778899aabb" configVersion="eb57916f126dbef478a22936796a309b8fc58f3c"/>
 		<Metadata name="DataProcessor.ЗС_ЗагрузкаСчетовИзPDF" id="e3d1a8c4-7b50-4e26-9a11-5f0c8d2b67e4" configVersion="e476e1eee7a1fe783cd35edd7b3317c0ff7a9590"/>
 		<Metadata name="DataProcessor.ЗС_ЗагрузкаСчетовИзPDF.Form.Форма" id="c4e7a1b8-2d50-4f63-9a16-8b0c3e5d71a2" configVersion="47b39386688d8e3edd9c3b5c3158fd273d2b3ffe"/>
-		<Metadata name="DataProcessor.ЗС_ЗагрузкаСчетовИзPDF.Form.Форма.Form" id="bb22cc33-dd44-4e55-9f66-778899aabbcc" configVersion="fc69f8349fc16eebfd820a9641474e7cd2f77a22"/>
 	</ConfigVersions>
 </ConfigDumpInfo>

@@ -1,2 +1,5 @@
 *.pdf
+*.log
+*.cfe
+установка.настройки.json
 .DS_Store
