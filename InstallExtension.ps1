@@ -9,7 +9,7 @@ try { chcp 65001 > $null } catch {}
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SettingsFile = Join-Path $Root "установка.настройки.json"
 $ExtName = "ЗагрузкаСчетовУПД"
-$Cfe = Join-Path $Root "ЗагрузкаСчетовУПД_1.0.1.cfe"
+$Cfe = Join-Path $Root "ЗагрузкаСчетовУПД_1.0.2.cfe"
 
 function Write-Title([string]$Text) {
     Write-Host ""
@@ -129,16 +129,54 @@ function Show-LogTail([string]$Text, [string]$Path) {
     ($Text -split "\r?\n" | Select-Object -Last 40) | ForEach-Object { Write-Host $_ }
 }
 
+function Format-DesignerArg([string]$Arg) {
+    if ($Arg -match '[\s"]' -or $Arg -match '[^\x00-\x7F]') {
+        return '"' + ($Arg -replace '"', '\"') + '"'
+    }
+    return $Arg
+}
+
 function Invoke-Designer([string]$Platform, [string[]]$Arguments, [string]$LogPath) {
     if (Test-Path $LogPath) { Remove-Item $LogPath -Force }
-    $proc = Start-Process -FilePath $Platform -ArgumentList $Arguments -Wait -PassThru -NoNewWindow
+    $line = ($Arguments | ForEach-Object { Format-DesignerArg $_ }) -join " "
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Platform
+    $psi.Arguments = $line
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    [void]$proc.Start()
+    $proc.WaitForExit()
     $text = Read-Log $LogPath
     Show-LogTail $text $LogPath
     return @{ Code = $proc.ExitCode; Text = $text }
 }
 
+function Copy-Dump([string]$Source) {
+    # Путь с кириллицей 1С часто не считает каталогом выгрузки.
+    $dest = Join-Path $env:TEMP "ZagruzkaSchetovUPD"
+    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+    New-Item -ItemType Directory -Path $dest | Out-Null
+    $skip = @(".git", "dist", "load.log", "update.log", "dump.log", "установка.настройки.json")
+    Get-ChildItem -LiteralPath $Source -Force | Where-Object { $skip -notcontains $_.Name -and $_.Extension -ne ".cfe" } | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest $_.Name) -Recurse -Force
+    }
+    if (-not (Test-Path (Join-Path $dest "Configuration.xml"))) { throw "В копии нет Configuration.xml" }
+    if (-not (Test-Path (Join-Path $dest "ConfigDumpInfo.xml"))) { throw "В копии нет ConfigDumpInfo.xml" }
+    return $dest
+}
+
 if (-not (Test-Path (Join-Path $Root "Configuration.xml"))) {
-    Write-Host "Рядом со скриптом нет Configuration.xml. Распакуйте архив целиком." -ForegroundColor Red
+    $nested = Get-ChildItem -LiteralPath $Root -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName "Configuration.xml") } |
+        Select-Object -First 1
+    if ($nested) { $Root = $nested.FullName }
+}
+if (-not (Test-Path (Join-Path $Root "Configuration.xml"))) {
+    Write-Host "Рядом со скриптом нет Configuration.xml." -ForegroundColor Red
+    Write-Host "Нужен каталог, внутри которого лежит Configuration.xml. Не zip и не папка уровнем выше." -ForegroundColor Red
+    Write-Host "Сейчас: $Root"
     exit 1
 }
 
@@ -236,9 +274,12 @@ $common = @("DESIGNER", "/DisableStartupDialogs")
 if ($mode -eq "file") { $common += @("/F", $connection) } else { $common += @("/S", $connection) }
 if ($auth -eq "windows") { $common += "/WA+" } else { $common += @("/N", $userName, "/P", $password, "/WA-") }
 
+Write-Title "Каталог выгрузки"
+$dump = Copy-Dump $Root
+Write-Host $dump
 $logLoad = Join-Path $Root "load.log"
 Write-Title "Загрузка расширения из файлов"
-$loadArgs = $common + @("/LoadConfigFromFiles", $Root, "-Format", "Hierarchical", "-Extension", $ExtName, "/Out", $logLoad)
+$loadArgs = $common + @("/LoadConfigFromFiles", $dump, "-Format", "Hierarchical", "-Extension", $ExtName, "/Out", $logLoad)
 $load = Invoke-Designer $platform $loadArgs $logLoad
 $loadOk = Test-StepOk $load
 if (-not $loadOk) {
