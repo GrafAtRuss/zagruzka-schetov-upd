@@ -158,6 +158,8 @@
 			<DataPath>Протокол</DataPath>
 			<ReadOnly>true</ReadOnly>
 			<TitleLocation>Top</TitleLocation>
+			<Height>12</Height>
+			<AutoMaxHeight>false</AutoMaxHeight>
 			<MultiLine>true</MultiLine>
 			<ContextMenu name="ПротоколКонтекстноеМеню" id="55"/>
 			<ExtendedTooltip name="ПротоколРасширеннаяПодсказка" id="56"/>
