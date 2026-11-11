@@ -24,6 +24,11 @@
 					<CommandName>Form.Command.ВыбратьКаталог</CommandName>
 					<ExtendedTooltip name="ВыбратьКаталогРасширеннаяПодсказка" id="91"/>
 				</Button>
+				<Button name="ВыбратьАрхивДиадок" id="92">
+					<Type>CommandBarButton</Type>
+					<CommandName>Form.Command.ВыбратьАрхивДиадок</CommandName>
+					<ExtendedTooltip name="ВыбратьАрхивДиадокРасширеннаяПодсказка" id="93"/>
+				</Button>
 				<Button name="СоздатьДокументы" id="4">
 					<Type>CommandBarButton</Type>
 					<CommandName>Form.Command.СоздатьДокументы</CommandName>
@@ -40,7 +45,7 @@
 			<Title formatted="false">
 				<v8:item>
 					<v8:lang>ru</v8:lang>
-					<v8:content>Можно выбрать сразу много PDF или целый каталог: счета покупателю и УПД. По каждому файлу создаются счет на оплату и УПД (реализация и счет-фактура). Уже существующие номер, дата и покупатель повторно не проводятся. Доступно только роли «Загрузка счетов и УПД из PDF».</v8:content>
+					<v8:content>Можно выбрать несколько PDF, каталог или архив выгрузки Диадок. Из архива загружаются счета, УПД и договоры. Уже существующие документы не дублируются, пустые реквизиты и связи дописываются. Доступно только роли «Загрузка счетов и УПД из PDF».</v8:content>
 				</v8:item>
 			</Title>
 			<ContextMenu name="ПодсказкаКонтекстноеМеню" id="9"/>
@@ -314,6 +319,12 @@
 				<v8:item><v8:lang>ru</v8:lang><v8:content>Каталог PDF</v8:content></v8:item>
 			</Title>
 			<Action>ВыбратьКаталог</Action>
+		</Command>
+		<Command name="ВыбратьАрхивДиадок" id="77">
+			<Title>
+				<v8:item><v8:lang>ru</v8:lang><v8:content>Архив Диадок</v8:content></v8:item>
+			</Title>
+			<Action>ВыбратьАрхивДиадок</Action>
 		</Command>
 		<Command name="СоздатьДокументы" id="74">
 			<Title>

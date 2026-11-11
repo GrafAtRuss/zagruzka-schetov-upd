@@ -145,6 +145,398 @@
 
 КонецФункции
 
+Функция ЗагрузитьАрхивДиадок(ДвоичныеДанные) Экспорт
+
+	Если ТипЗнч(ДвоичныеДанные) <> Тип("ДвоичныеДанные") Тогда
+		Возврат "Не переданы данные архива.";
+	КонецЕсли;
+
+	Ид = СтрЗаменить(Строка(Новый УникальныйИдентификатор), "-", "");
+	Каталог = КаталогВременныхФайлов();
+	ПутьZip = Каталог + "zs_" + Ид + ".zip";
+	ПутьPS = Каталог + "zs_" + Ид + "_diadoc.ps1";
+	ПутьPDF = Каталог + "zs_" + Ид + "_extract.ps1";
+	ПутьJSON = Каталог + "zs_" + Ид + "_diadoc.json";
+	ДвоичныеДанные.Записать(ПутьZip);
+
+	Запись = Новый ЗаписьТекста(ПутьPS, КодировкаТекста.UTF8);
+	Запись.Записать(ТекстСкриптаДиадок());
+	Запись.Закрыть();
+	Запись = Новый ЗаписьТекста(ПутьPDF, КодировкаТекста.UTF8);
+	Запись.Записать(ТекстСкрипта());
+	Запись.Закрыть();
+
+	Команда = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File """
+		+ ПутьPS + """ -ZipPath """ + ПутьZip + """ -OutPath """ + ПутьJSON + """ -ExtractScript """ + ПутьPDF + """";
+	Попытка
+		Оболочка = Новый COMОбъект("WScript.Shell");
+		Оболочка.Run(Команда, 0, Истина);
+	Исключение
+		УдалитьВременные(ПутьZip, ПутьPS, ПутьJSON);
+		УдалитьВременные(ПутьPDF, "", "");
+		Возврат "Не удалось запустить PowerShell. Снимите безопасный режим расширения. "
+			+ КраткоеПредставлениеОшибки(ИнформацияОбОшибке());
+	КонецПопытки;
+
+	Файл = Новый Файл(ПутьJSON);
+	Если Не Файл.Существует() Тогда
+		УдалитьВременные(ПутьZip, ПутьPS, ПутьJSON);
+		УдалитьВременные(ПутьPDF, "", "");
+		Возврат "PowerShell не вернул разбор архива Диадока.";
+	КонецЕсли;
+	ЧтениеТекста = Новый ЧтениеТекста(ПутьJSON, КодировкаТекста.UTF8);
+	ТекстJSON = ЧтениеТекста.Прочитать();
+	ЧтениеТекста.Закрыть();
+	УдалитьВременные(ПутьZip, ПутьPS, ПутьJSON);
+	УдалитьВременные(ПутьPDF, "", "");
+
+	Чтение = Новый ЧтениеJSON;
+	Чтение.УстановитьСтроку(ТекстJSON);
+	Корень = ПрочитатьJSON(Чтение);
+	ОшибкаАрхива = ЗначениеПоля(Корень, "Ошибка", "");
+	Если ЗначениеЗаполнено(ОшибкаАрхива) Тогда
+		Возврат Строка(ОшибкаАрхива);
+	КонецЕсли;
+
+	Документы = ЗначениеПоля(Корень, "Документы", Новый Массив);
+	Если ТипЗнч(Документы) <> Тип("Массив") Тогда
+		Список = Новый Массив;
+		Список.Добавить(Документы);
+		Документы = Список;
+	КонецЕсли;
+
+	Протокол = Новый Массив;
+	Связи = Новый Массив;
+	Создано = 0;
+	Пропущено = 0;
+	Для Каждого Документ Из Документы Цикл
+		Вид = Строка(ЗначениеПоля(Документ, "Вид", ""));
+		ИмяФайла = Строка(ЗначениеПоля(Документ, "ИмяФайла", ""));
+		Если Вид = "Договор" Тогда
+			Протокол.Добавить(УчестьДоговорАрхива(Документ));
+			Продолжить;
+		КонецЕсли;
+		Если Вид = "Прочее" Или Вид = "АктСверки" Или Вид = "Доверенность" Или Вид = "Заявка" Или Вид = "Письмо" Тогда
+			Причина = Строка(ЗначениеПоля(Документ, "Причина", "В учет не проводится."));
+			Протокол.Добавить(ИмяФайла + ": пропущен. " + Причина);
+			Пропущено = Пропущено + 1;
+			Продолжить;
+		КонецЕсли;
+		Если Вид <> "Счет" И Вид <> "УПД" Тогда
+			Протокол.Добавить(ИмяФайла + ": пропущен, неизвестный вид " + Вид);
+			Пропущено = Пропущено + 1;
+			Продолжить;
+		КонецЕсли;
+
+		СсылкаПоИд = НайтиПоИдентификатору(Строка(ЗначениеПоля(Документ, "Ид", "")));
+		Если ЗначениеЗаполнено(СсылкаПоИд) Тогда
+			Протокол.Добавить(ИмяФайла + ": уже есть в базе, дубль не создан (" + Строка(СсылкаПоИд) + ").");
+			Пропущено = Пропущено + 1;
+			Связи.Добавить(ОписаниеСвязи(Документ, СсылкаПоИд));
+			Продолжить;
+		КонецЕсли;
+
+		Если Вид = "Счет" Тогда
+			Документ.Вставить("СоздатьСчет", Истина);
+			Документ.Вставить("СоздатьУПД", Ложь);
+		Иначе
+			Документ.Вставить("СоздатьСчет", Ложь);
+			Документ.Вставить("СоздатьУПД", Истина);
+		КонецЕсли;
+
+		ЗаписьJSON = Новый ЗаписьJSON;
+		ЗаписьJSON.УстановитьСтроку();
+		ЗаписатьJSON(ЗаписьJSON, Документ);
+		Попытка
+			ТекстСоздания = СоздатьДокументы(ЗаписьJSON.Закрыть());
+			Протокол.Добавить(ИмяФайла + ": " + ТекстСоздания);
+			Если СтрНайти(ТекстСоздания, "уже есть") > 0 Или СтрНайти(ТекстСоздания, "дополнено") > 0 Тогда
+				Пропущено = Пропущено + 1;
+			Иначе
+				Создано = Создано + 1;
+			КонецЕсли;
+		Исключение
+			Протокол.Добавить(ИмяФайла + ": " + КраткоеПредставлениеОшибки(ИнформацияОбОшибке()));
+			Продолжить;
+		КонецПопытки;
+		Связи.Добавить(ОписаниеСвязи(Документ, Неопределено));
+	КонецЦикла;
+
+	Протокол.Добавить(СвязатьДокументыАрхива(Связи));
+	Протокол.Вставить(0, "Архив Диадок. Создано пакетов: " + Формат(Создано, "ЧГ=0")
+		+ ", уже было или не проводится: " + Формат(Пропущено, "ЧГ=0") + ".");
+	Возврат СтрСоединить(Протокол, Символы.ПС);
+
+КонецФункции
+
+Функция ОписаниеСвязи(Документ, СсылкаПоИд)
+
+	Покупатель = ЗначениеПоля(Документ, "Покупатель", Новый Структура);
+	Вид = Строка(ЗначениеПоля(Документ, "Вид", ""));
+	Счет = Документы.СчетНаОплатуПокупателю.ПустаяСсылка();
+	Реализация = Документы.РеализацияТоваровУслуг.ПустаяСсылка();
+	Если ТипЗнч(СсылкаПоИд) = Тип("ДокументСсылка.СчетНаОплатуПокупателю") Тогда
+		Счет = СсылкаПоИд;
+	ИначеЕсли ТипЗнч(СсылкаПоИд) = Тип("ДокументСсылка.РеализацияТоваровУслуг") Тогда
+		Реализация = СсылкаПоИд;
+	ИначеЕсли ТипЗнч(СсылкаПоИд) = Тип("ДокументСсылка.СчетФактураВыданный") Тогда
+		Реализация = РеализацияСчетаФактуры(СсылкаПоИд);
+	КонецЕсли;
+	Возврат Новый Структура("Вид,ИНН,Пакет,Договор,ПлатежкаНомер,ПлатежкаДата,Счет,Реализация,Номер,Дата",
+		Вид,
+		Строка(ЗначениеПоля(Покупатель, "ИНН", ЗначениеПоля(Документ, "ИННПапки", ""))),
+		Строка(ЗначениеПоля(Документ, "Пакет", "")),
+		КлючДоговора(Строка(ЗначениеПоля(Документ, "Основание", ""))),
+		Строка(ЗначениеПоля(Документ, "ПлатежкаНомер", "")),
+		Строка(ЗначениеПоля(Документ, "ПлатежкаДата", "")),
+		Счет,
+		Реализация,
+		Строка(ЗначениеПоля(Документ, "Номер", "")),
+		ЗначениеПоля(Документ, "Дата", ""));
+
+КонецФункции
+
+Функция СвязатьДокументыАрхива(Связи)
+
+	Строки = Новый Массив;
+	Для Каждого Связь Из Связи Цикл
+		Если Связь.Вид = "Счет" И Не ЗначениеЗаполнено(Связь.Счет) Тогда
+			Связь.Счет = НайтиСсылкуЗагрузки("СчетНаОплатуПокупателю", Связь);
+		ИначеЕсли Связь.Вид = "УПД" И Не ЗначениеЗаполнено(Связь.Реализация) Тогда
+			Связь.Реализация = НайтиСсылкуЗагрузки("РеализацияТоваровУслуг", Связь);
+		КонецЕсли;
+	КонецЦикла;
+
+	Для Каждого УПД Из Связи Цикл
+		Если УПД.Вид <> "УПД" Или Не ЗначениеЗаполнено(УПД.Реализация) Тогда
+			Продолжить;
+		КонецЕсли;
+		Счет = НайтиСчетДляУПД(Связи, УПД);
+		Если ЗначениеЗаполнено(Счет) И ПривязатьСчетКРеализации(УПД.Реализация, Счет) Тогда
+			Строки.Добавить("Связь: " + Строка(УПД.Реализация) + " <- " + Строка(Счет));
+		КонецЕсли;
+		Если ЗначениеЗаполнено(УПД.ПлатежкаНомер) Тогда
+			Поступление = НайтиПоступлениеОплаты(УПД.ПлатежкаНомер, УПД.ПлатежкаДата);
+			Если ЗначениеЗаполнено(Поступление) Тогда
+				ДописатьОплатуВКомментарий(УПД.Реализация, УПД.ПлатежкаНомер, Поступление);
+				Строки.Добавить("Оплата УПД " + Строка(УПД.Реализация) + ": " + Строка(Поступление));
+			КонецЕсли;
+		КонецЕсли;
+	КонецЦикла;
+	Если Строки.Количество() = 0 Тогда
+		Возврат "Новых связей между документами не добавлено.";
+	КонецЕсли;
+	Возврат СтрСоединить(Строки, Символы.ПС);
+
+КонецФункции
+
+Функция НайтиСчетДляУПД(Связи, УПД)
+
+	ПоПакету = Новый Массив;
+	ПоДоговору = Новый Массив;
+	Для Каждого Связь Из Связи Цикл
+		Если Связь.Вид <> "Счет" Или Не ЗначениеЗаполнено(Связь.Счет) Тогда
+			Продолжить;
+		КонецЕсли;
+		Если ЗначениеЗаполнено(УПД.Пакет) И Связь.Пакет = УПД.Пакет Тогда
+			ПоПакету.Добавить(Связь.Счет);
+		КонецЕсли;
+		Если ЗначениеЗаполнено(УПД.Договор) И Связь.ИНН = УПД.ИНН И Связь.Договор = УПД.Договор Тогда
+			ПоДоговору.Добавить(Связь.Счет);
+		КонецЕсли;
+	КонецЦикла;
+	Если ПоПакету.Количество() = 1 Тогда
+		Возврат ПоПакету[0];
+	КонецЕсли;
+	Если ПоДоговору.Количество() = 1 Тогда
+		Возврат ПоДоговору[0];
+	КонецЕсли;
+	Возврат Документы.СчетНаОплатуПокупателю.ПустаяСсылка();
+
+КонецФункции
+
+Функция НайтиСсылкуЗагрузки(ИмяДокумента, Связь)
+
+	ДатаДок = ДатаИзСтроки(Связь.Дата);
+	Если ДатаДок = Неопределено Или Не ЗначениеЗаполнено(Связь.Номер) Или Не ЗначениеЗаполнено(Связь.ИНН) Тогда
+		Возврат Неопределено;
+	КонецЕсли;
+	Контрагент = НайтиКонтрагентаПоИНН(Связь.ИНН);
+	Если Не ЗначениеЗаполнено(Контрагент) Тогда
+		Возврат Неопределено;
+	КонецЕсли;
+	Возврат НайтиСуществующий(ИмяДокумента, Связь.Номер, ДатаДок, Контрагент);
+
+КонецФункции
+
+Функция ПривязатьСчетКРеализации(Реализация, Счет)
+
+	Объект = Реализация.ПолучитьОбъект();
+	Если Объект.Метаданные().Реквизиты.Найти("СчетНаОплатуПокупателю") = Неопределено Тогда
+		Возврат Ложь;
+	КонецЕсли;
+	Если ЗначениеЗаполнено(Объект.СчетНаОплатуПокупателю) Тогда
+		Возврат Ложь;
+	КонецЕсли;
+	Объект.СчетНаОплатуПокупателю = Счет;
+	Попытка
+		Если Объект.Проведен Тогда
+			Объект.Записать(РежимЗаписиДокумента.Проведение);
+		Иначе
+			Объект.Записать(РежимЗаписиДокумента.Запись);
+		КонецЕсли;
+	Исключение
+		Попытка
+			Объект.Записать(РежимЗаписиДокумента.Запись);
+		Исключение
+			Возврат Ложь;
+		КонецПопытки;
+	КонецПопытки;
+	Возврат Истина;
+
+КонецФункции
+
+Процедура ДописатьОплатуВКомментарий(Реализация, НомерПлатежки, Поступление)
+
+	Объект = Реализация.ПолучитьОбъект();
+	Если Объект.Метаданные().Реквизиты.Найти("Комментарий") = Неопределено Тогда
+		Возврат;
+	КонецЕсли;
+	Если СтрНайти(Строка(Объект.Комментарий), НомерПлатежки) > 0 Тогда
+		Возврат;
+	КонецЕсли;
+	Объект.Комментарий = СокрЛП(Строка(Объект.Комментарий) + " Оплата ПП " + НомерПлатежки + ": " + Строка(Поступление));
+	Попытка
+		Объект.Записать(РежимЗаписиДокумента.Запись);
+	Исключение
+		Возврат;
+	КонецПопытки;
+
+КонецПроцедуры
+
+Функция НайтиПоступлениеОплаты(Номер, ДатаТекст)
+
+	ДатаДок = ДатаИзСтроки(ДатаТекст);
+	Если Не ЗначениеЗаполнено(Номер) Или ДатаДок = Неопределено Тогда
+		Возврат Неопределено;
+	КонецЕсли;
+	Если Метаданные.Документы.Найти("ПоступлениеНаРасчетныйСчет") = Неопределено Тогда
+		Возврат Неопределено;
+	КонецЕсли;
+	Запрос = Новый Запрос;
+	Запрос.Текст =
+	"ВЫБРАТЬ ПЕРВЫЕ 1
+	|	Оплата.Ссылка КАК Ссылка
+	|ИЗ
+	|	Документ.ПоступлениеНаРасчетныйСчет КАК Оплата
+	|ГДЕ
+	|	НЕ Оплата.ПометкаУдаления
+	|	И Оплата.НомерВходящегоДокумента = &Номер
+	|	И Оплата.ДатаВходящегоДокумента = &Дата";
+	Запрос.УстановитьПараметр("Номер", Номер);
+	Запрос.УстановитьПараметр("Дата", ДатаДок);
+	Попытка
+		Выборка = Запрос.Выполнить().Выбрать();
+	Исключение
+		Возврат Неопределено;
+	КонецПопытки;
+	Если Выборка.Следующий() Тогда
+		Возврат Выборка.Ссылка;
+	КонецЕсли;
+	Возврат Неопределено;
+
+КонецФункции
+
+Функция УчестьДоговорАрхива(Документ)
+
+	ИНН = Строка(ЗначениеПоля(Документ, "ИННПапки", ""));
+	Наименование = Строка(ЗначениеПоля(Документ, "Наименование", ЗначениеПоля(Документ, "Основание", "")));
+	Если Не ЗначениеЗаполнено(ИНН) Или Не ЗначениеЗаполнено(Наименование) Тогда
+		Возврат Строка(ЗначениеПоля(Документ, "ИмяФайла", "Договор")) + ": пропущен, нет ИНН или названия.";
+	КонецЕсли;
+	Контрагент = НайтиКонтрагентаПоИНН(ИНН);
+	Если Не ЗначениеЗаполнено(Контрагент) Тогда
+		Возврат Наименование + ": договор не создан, контрагент с ИНН " + ИНН + " не найден. Дубль не создается.";
+	КонецЕсли;
+	Организация = НайтиОрганизацию("7717552784");
+	Договор = НайтиИлиСоздатьДоговор(Контрагент, Организация, Наименование);
+	Возврат "Договор учтен без дубля: " + Строка(Договор);
+
+КонецФункции
+
+Функция НайтиКонтрагентаПоИНН(ИНН)
+
+	Запрос = Новый Запрос;
+	Запрос.Текст =
+	"ВЫБРАТЬ ПЕРВЫЕ 1
+	|	Контрагенты.Ссылка КАК Ссылка
+	|ИЗ
+	|	Справочник.Контрагенты КАК Контрагенты
+	|ГДЕ
+	|	Контрагенты.ИНН = &ИНН
+	|	И НЕ Контрагенты.ПометкаУдаления";
+	Запрос.УстановитьПараметр("ИНН", ИНН);
+	Выборка = Запрос.Выполнить().Выбрать();
+	Если Выборка.Следующий() Тогда
+		Возврат Выборка.Ссылка;
+	КонецЕсли;
+	Возврат Справочники.Контрагенты.ПустаяСсылка();
+
+КонецФункции
+
+Функция НайтиПоИдентификатору(Ид)
+
+	Ид = СокрЛП(Ид);
+	Если СтрДлина(Ид) <> 36 Тогда
+		Возврат Неопределено;
+	КонецЕсли;
+	Попытка
+		УИД = Новый УникальныйИдентификатор(Ид);
+	Исключение
+		Возврат Неопределено;
+	КонецПопытки;
+	Имена = СтрРазделить("РеализацияТоваровУслуг,СчетФактураВыданный,СчетНаОплатуПокупателю", ",");
+	Для Каждого Имя Из Имена Цикл
+		Ссылка = Документы[Имя].ПолучитьСсылку(УИД);
+		Запрос = Новый Запрос;
+		Запрос.Текст = "ВЫБРАТЬ ПЕРВЫЕ 1 Док.Ссылка КАК Ссылка ИЗ Документ." + Имя + " КАК Док ГДЕ Док.Ссылка = &Ссылка";
+		Запрос.УстановитьПараметр("Ссылка", Ссылка);
+		Попытка
+			Выборка = Запрос.Выполнить().Выбрать();
+		Исключение
+			Продолжить;
+		КонецПопытки;
+		Если Выборка.Следующий() Тогда
+			Возврат Выборка.Ссылка;
+		КонецЕсли;
+	КонецЦикла;
+	Возврат Неопределено;
+
+КонецФункции
+
+Функция РеализацияСчетаФактуры(СчетФактура)
+
+	Попытка
+		Основание = СчетФактура.ДокументОснование;
+		Если ТипЗнч(Основание) = Тип("ДокументСсылка.РеализацияТоваровУслуг") Тогда
+			Возврат Основание;
+		КонецЕсли;
+	Исключение
+		Возврат Документы.РеализацияТоваровУслуг.ПустаяСсылка();
+	КонецПопытки;
+	Возврат Документы.РеализацияТоваровУслуг.ПустаяСсылка();
+
+КонецФункции
+
+Функция КлючДоговора(Основание)
+
+	Текст = НРег(СокрЛП(Основание));
+	Текст = СтрЗаменить(Текст, "№№", "№");
+	Текст = СтрЗаменить(Текст, "  ", " ");
+	Возврат Текст;
+
+КонецФункции
+
 #КонецОбласти
 
 #Область СлужебныеПроцедурыИФункции
@@ -323,6 +715,117 @@
 
 КонецФункции
 
+Функция ТекстСкриптаДиадок()
+
+	Б64 = "cGFyYW0oCiAgICBbUGFyYW1ldGVyKE1hbmRhdG9yeSA9ICR0cnVlKV1bc3RyaW5nXSRaaXBQYXRoLAogICAgW1BhcmFtZXRlcihNYW5kYXRvcnkgPSAkdHJ1ZSldW3N0cmluZ10kT3V0UGF0aCwKICAgIFtQYXJhbWV0ZXIoTWFuZGF0b3J5"
+	+ "ID0gJHRydWUpXVtzdHJpbmddJEV4dHJhY3RTY3JpcHQKKQoKJEVycm9yQWN0aW9uUHJlZmVyZW5jZSA9ICJTdG9wIgpbU3lzdGVtLlRocmVhZGluZy5UaHJlYWRdOjpDdXJyZW50VGhyZWFkLkN1cnJlbnRDdWx0dXJlID0gW1N5c3RlbS5H"
+	+ "bG9iYWxpemF0aW9uLkN1bHR1cmVJbmZvXTo6SW52YXJpYW50Q3VsdHVyZQpBZGQtVHlwZSAtQXNzZW1ibHlOYW1lIFN5c3RlbS5JTy5Db21wcmVzc2lvbgpBZGQtVHlwZSAtQXNzZW1ibHlOYW1lIFN5c3RlbS5JTy5Db21wcmVzc2lvbi5G"
+	+ "aWxlU3lzdGVtCgpmdW5jdGlvbiBXcml0ZS1SZXN1bHQoW29iamVjdF0kUGF5bG9hZCkgewogICAgJGpzb24gPSAkUGF5bG9hZCB8IENvbnZlcnRUby1Kc29uIC1EZXB0aCA4IC1Db21wcmVzcwogICAgW1N5c3RlbS5JTy5GaWxlXTo6V3Jp"
+	+ "dGVBbGxUZXh0KCRPdXRQYXRoLCAkanNvbiwgW1N5c3RlbS5UZXh0LlVURjhFbmNvZGluZ106Om5ldygkZmFsc2UpKQp9CgpmdW5jdGlvbiBSZXBhaXItWmlwTmFtZShbc3RyaW5nXSROYW1lKSB7CiAgICBpZiAoJE5hbWUgLW1hdGNoICJb"
+	+ "0JAt0K/QsC3Rj9CB0ZFdIikgeyByZXR1cm4gJE5hbWUgfQogICAgZm9yZWFjaCAoJHBhZ2UgaW4gQCg0MzcsIDEyNTEpKSB7CiAgICAgICAgdHJ5IHsKICAgICAgICAgICAgJGJ5dGVzID0gW1N5c3RlbS5UZXh0LkVuY29kaW5nXTo6R2V0"
+	+ "RW5jb2RpbmcoJHBhZ2UpLkdldEJ5dGVzKCROYW1lKQogICAgICAgICAgICAkZml4ZWQgPSBbU3lzdGVtLlRleHQuRW5jb2RpbmddOjpHZXRFbmNvZGluZyg4NjYpLkdldFN0cmluZygkYnl0ZXMpCiAgICAgICAgICAgIGlmICgkZml4ZWQg"
+	+ "LW1hdGNoICJb0JAt0K/QsC3Rj9CB0ZFdIikgeyByZXR1cm4gJGZpeGVkIH0KICAgICAgICB9IGNhdGNoIHt9CiAgICB9CiAgICByZXR1cm4gJE5hbWUKfQoKZnVuY3Rpb24gQ29udmVydC1Eb3REYXRlKFtzdHJpbmddJFZhbHVlKSB7CiAg"
+	+ "ICBpZiAoJFZhbHVlIC1tYXRjaCAiXihcZHsyfSlcLihcZHsyfSlcLihcZHs0fSkkIikgewogICAgICAgIHJldHVybiAiezB9LXsxfS17Mn0iIC1mICRNYXRjaGVzWzNdLCAkTWF0Y2hlc1syXSwgJE1hdGNoZXNbMV0KICAgIH0KICAgIGlm"
+	+ "ICgkVmFsdWUgLW1hdGNoICJeKFxkezJ9KVwuKFxkezJ9KVwuKFxkezJ9KSQiKSB7CiAgICAgICAgcmV0dXJuICIyMHswfS17MX0tezJ9IiAtZiAkTWF0Y2hlc1szXSwgJE1hdGNoZXNbMl0sICRNYXRjaGVzWzFdCiAgICB9CiAgICByZXR1"
+	+ "cm4gIiIKfQoKZnVuY3Rpb24gR2V0LUZvbGRlcklubihbc3RyaW5nXSRQYXRoKSB7CiAgICBmb3JlYWNoICgkcGFydCBpbiAoJFBhdGggLXNwbGl0ICIvIikpIHsKICAgICAgICBpZiAoJHBhcnQgLW1hdGNoICJeXGR7MTB9KFxkezJ9KT8k"
+	+ "IikgeyByZXR1cm4gJHBhcnQgfQogICAgfQogICAgcmV0dXJuICIiCn0KCmZ1bmN0aW9uIEdldC1QYWNrZXQoW3N0cmluZ10kUGF0aCkgewogICAgJGRpciA9IFtTeXN0ZW0uSU8uUGF0aF06OkdldERpcmVjdG9yeU5hbWUoJFBhdGguUmVw"
+	+ "bGFjZSgiLyIsICJcIikpCiAgICBpZiAoLW5vdCAkZGlyKSB7IHJldHVybiAkUGF0aCB9CiAgICByZXR1cm4gKCRkaXIgLXJlcGxhY2UgIlxcIiwgIi8iKQp9CgpmdW5jdGlvbiBHZXQtUGFydHlOb2RlKCROb2RlKSB7CiAgICAkZW1wdHkg"
+	+ "PSBAeyDQndCw0LjQvNC10L3QvtCy0LDQvdC40LUgPSAiIjsg0JjQndCdID0gIiI7INCa0J/QnyA9ICIiOyDQkNC00YDQtdGBID0gIiIgfQogICAgaWYgKCRudWxsIC1lcSAkTm9kZSkgeyByZXR1cm4gJGVtcHR5IH0KICAgICR1bCA9ICRu"
+	+ "dWxsCiAgICAkaXAgPSAkbnVsbAogICAgdHJ5IHsgJHVsID0gJE5vZGUu0JjQtNCh0LIu0KHQstCu0JvQo9GHIH0gY2F0Y2gge30KICAgIHRyeSB7ICRpcCA9ICROb2RlLtCY0LTQodCyLtCh0LLQmNCfIH0gY2F0Y2gge30KICAgIGlmICgk"
+	+ "dWwpIHsKICAgICAgICByZXR1cm4gQHsKICAgICAgICAgICAg0J3QsNC40LzQtdC90L7QstCw0L3QuNC1ID0gW3N0cmluZ10kdWwu0J3QsNC40LzQntGA0LMKICAgICAgICAgICAg0JjQndCdID0gW3N0cmluZ10kdWwu0JjQndCd0K7Qmwog"
+	+ "ICAgICAgICAgICDQmtCf0J8gPSBbc3RyaW5nXSR1bC7QmtCf0J8KICAgICAgICAgICAg0JDQtNGA0LXRgSA9ICIiCiAgICAgICAgfQogICAgfQogICAgaWYgKCRpcCkgewogICAgICAgICRmaW8gPSAkaXAu0KTQmNCeCiAgICAgICAgJG5h"
+	+ "bWUgPSAoQChbc3RyaW5nXSRmaW8u0KTQsNC80LjQu9C40Y8sIFtzdHJpbmddJGZpby7QmNC80Y8sIFtzdHJpbmddJGZpby7QntGC0YfQtdGB0YLQstC+KSB8IFdoZXJlLU9iamVjdCB7ICRfIH0pIC1qb2luICIgIgogICAgICAgIHJldHVy"
+	+ "biBAeyDQndCw0LjQvNC10L3QvtCy0LDQvdC40LUgPSAkbmFtZS5UcmltKCk7INCY0J3QnSA9IFtzdHJpbmddJGlwLtCY0J3QndCk0Js7INCa0J/QnyA9ICIiOyDQkNC00YDQtdGBID0gIiIgfQogICAgfQogICAgcmV0dXJuICRlbXB0eQp9"
+	+ "CgpmdW5jdGlvbiBHZXQtQXR0clRleHQoJE5vZGUsIFtzdHJpbmddJE5hbWUpIHsKICAgIGlmICgkbnVsbCAtZXEgJE5vZGUpIHsgcmV0dXJuICIiIH0KICAgICR2YWx1ZSA9ICROb2RlLkdldEF0dHJpYnV0ZSgkTmFtZSkKICAgIGlmICgk"
+	+ "dmFsdWUpIHsgcmV0dXJuIFtzdHJpbmddJHZhbHVlIH0KICAgICRwcm9wID0gJE5vZGUuJE5hbWUKICAgIGlmICgkcHJvcCkgeyByZXR1cm4gW3N0cmluZ10kcHJvcCB9CiAgICByZXR1cm4gIiIKfQoKZnVuY3Rpb24gUmVhZC1VcGRYbWwo"
+	+ "W3N0cmluZ10kRmlsZSwgW3N0cmluZ10kUGFja2V0LCBbc3RyaW5nXSRGb2xkZXJJbm4pIHsKICAgICR0ZXh0ID0gW1N5c3RlbS5UZXh0LkVuY29kaW5nXTo6R2V0RW5jb2RpbmcoMTI1MSkuR2V0U3RyaW5nKFtTeXN0ZW0uSU8uRmlsZV06"
+	+ "OlJlYWRBbGxCeXRlcygkRmlsZSkpCiAgICBbeG1sXSR4bWwgPSAkdGV4dAogICAgJGRvYyA9ICR4bWwu0KTQsNC50Lsu0JTQvtC60YPQvNC10L3RggogICAgJHNmID0gJGRvYy7QodCy0KHRh9Ck0LDQutGCCiAgICAkc2VsbGVyID0gR2V0"
+	+ "LVBhcnR5Tm9kZSAkc2Yu0KHQstCf0YDQvtC0CiAgICAkYnV5ZXIgPSBHZXQtUGFydHlOb2RlICRzZi7QodCy0J/QvtC60YPQvwogICAgJGJhbmtOb2RlID0gJG51bGwKICAgIHRyeSB7ICRiYW5rTm9kZSA9ICRzZi7QodCy0J/RgNC+0LQu"
+	+ "0JHQsNC90LrQoNC10LrQsiB9IGNhdGNoIHt9CiAgICAkYmFuayA9IEB7INCd0LDQuNC80LXQvdC+0LLQsNC90LjQtSA9ICIiOyDQkdCY0JogPSAiIjsg0JrQvtGA0YDQodGH0LXRgiA9ICIiOyDQoNCw0YHRh9C10YLQvdGL0LnQodGH0LXR"
+	+ "giA9ICIiIH0KICAgIGlmICgkYmFua05vZGUpIHsKICAgICAgICAkc3YgPSAkYmFua05vZGUu0KHQstCR0LDQvdC6CiAgICAgICAgJGJhbmsgPSBAewogICAgICAgICAgICDQndCw0LjQvNC10L3QvtCy0LDQvdC40LUgPSBbc3RyaW5nXSRz"
+	+ "di7QndCw0LjQvNCR0LDQvdC6CiAgICAgICAgICAgINCR0JjQmiA9IFtzdHJpbmddJHN2LtCR0JjQmgogICAgICAgICAgICDQmtC+0YDRgNCh0YfQtdGCID0gW3N0cmluZ10kc3Yu0JrQvtGA0KHRh9C10YIKICAgICAgICAgICAg0KDQsNGB"
+	+ "0YfQtdGC0L3Ri9C50KHRh9C10YIgPSBbc3RyaW5nXSRiYW5rTm9kZS7QndC+0LzQtdGA0KHRh9C10YLQsAogICAgICAgIH0KICAgIH0KICAgICRsaW5lcyA9IE5ldy1PYmplY3QgU3lzdGVtLkNvbGxlY3Rpb25zLkdlbmVyaWMuTGlzdFtv"
+	+ "YmplY3RdCiAgICAkZ29vZHMgPSBAKCkKICAgIHRyeSB7ICRnb29kcyA9IEAoJGRvYy7QotCw0LHQu9Ch0YfQpNCw0LrRgi7QodCy0LXQtNCi0L7QsikgfSBjYXRjaCB7fQogICAgZm9yZWFjaCAoJHJvdyBpbiAkZ29vZHMpIHsKICAgICAg"
+	+ "ICBpZiAoJG51bGwgLWVxICRyb3cgLW9yIC1ub3QgJHJvdy7QndCw0LjQvNCi0L7QsikgeyBjb250aW51ZSB9CiAgICAgICAgJHF0eSA9IDEuMAogICAgICAgIGlmICgkcm93LtCa0L7Qu9Ci0L7QsikgeyAkcXR5ID0gW2RvdWJsZV0kcm93"
+	+ "LtCa0L7Qu9Ci0L7QsiB9CiAgICAgICAgJGdyb3NzID0gMC4wCiAgICAgICAgaWYgKCRyb3cu0KHRgtCi0L7QstCj0YfQndCw0LspIHsgJGdyb3NzID0gW2RvdWJsZV0kcm93LtCh0YLQotC+0LLQo9GH0J3QsNC7IH0KICAgICAgICAkcHJp"
+	+ "Y2UgPSAkZ3Jvc3MKICAgICAgICBpZiAoJHF0eSAtbmUgMCkgeyAkcHJpY2UgPSBbbWF0aF06OlJvdW5kKCRncm9zcyAvICRxdHksIDIpIH0KICAgICAgICAkbGluZXMuQWRkKFtwc2N1c3RvbW9iamVjdF1AewogICAgICAgICAgICDQodC+"
+	+ "0LTQtdGA0LbQsNC90LjQtSA9IFtzdHJpbmddJHJvdy7QndCw0LjQvNCi0L7QsgogICAgICAgICAgICDQmtC+0LvQuNGH0LXRgdGC0LLQviA9ICRxdHkKICAgICAgICAgICAg0JXQtNC40L3QuNGG0LAgPSBbc3RyaW5nXSRyb3cu0J3QsNC4"
+	+ "0LzQldC00JjQt9C8CiAgICAgICAgICAgINCm0LXQvdCwID0gJHByaWNlCiAgICAgICAgICAgINCh0YPQvNC80LAgPSBbbWF0aF06OlJvdW5kKCRncm9zcywgMikKICAgICAgICB9KQogICAgfQogICAgJHRvdGFsID0gMC4wCiAgICAkbmV0"
+	+ "ID0gMC4wCiAgICB0cnkgeyAkdG90YWwgPSBbZG91YmxlXSRkb2Mu0KLQsNCx0LvQodGH0KTQsNC60YIu0JLRgdC10LPQvtCe0L/Quy7QodGC0KLQvtCy0KPRh9Cd0LDQu9CS0YHQtdCz0L4gfSBjYXRjaCB7fQogICAgdHJ5IHsgJG5ldCA9"
+	+ "IFtkb3VibGVdJGRvYy7QotCw0LHQu9Ch0YfQpNCw0LrRgi7QktGB0LXQs9C+0J7Qv9C7LtCh0YLQotC+0LLQkdC10LfQndCU0KHQktGB0LXQs9C+IH0gY2F0Y2gge30KICAgIGlmICgkdG90YWwgLWVxIDApIHsgZm9yZWFjaCAoJGxpbmUg"
+	+ "aW4gJGxpbmVzKSB7ICR0b3RhbCArPSAkbGluZS7QodGD0LzQvNCwIH0gfQogICAgJHZhdFN1bSA9IFttYXRoXTo6Um91bmQoJHRvdGFsIC0gJG5ldCwgMikKICAgIGlmICgkdmF0U3VtIC1sdCAwKSB7ICR2YXRTdW0gPSAwIH0KICAgICRy"
+	+ "YXRlID0gMAogICAgJHJhdGVUZXh0ID0gIiIKICAgIGlmICgkZ29vZHMuQ291bnQgLWd0IDApIHsgJHJhdGVUZXh0ID0gW3N0cmluZ10kZ29vZHNbMF0u0J3QsNC70KHRgiB9CiAgICBpZiAoJHJhdGVUZXh0IC1tYXRjaCAiKFxkKykiKSB7"
+	+ "ICRyYXRlID0gW2ludF0kTWF0Y2hlc1sxXSB9CiAgICAkYmFzaXMgPSAiIgogICAgJGNvbnRyYWN0Tm8gPSAiIgogICAgJGNvbnRyYWN0RGF0ZSA9ICIiCiAgICAkcGVyID0gJG51bGwKICAgIHRyeSB7ICRwZXIgPSAkZG9jLtCh0LLQn9GA"
+	+ "0L7QtNCf0LXRgC7QodCy0J/QtdGAIH0gY2F0Y2gge30KICAgIGlmICgtbm90ICRwZXIpIHsgdHJ5IHsgJHBlciA9ICRkb2Mu0KHQstCf0LXRgCB9IGNhdGNoIHt9IH0KICAgIGlmICgkcGVyKSB7CiAgICAgICAgJG9zbiA9IEAoJHBlci7Q"
+	+ "ntGB0L3Qn9C10YApIHwgU2VsZWN0LU9iamVjdCAtRmlyc3QgMQogICAgICAgIGlmICgkb3NuKSB7CiAgICAgICAgICAgICRiYXNpcyA9IFtzdHJpbmddJG9zbi7QoNC10LrQstCd0LDQuNC80JTQvtC6CiAgICAgICAgICAgICRjb250cmFj"
+	+ "dE5vID0gW3N0cmluZ10kb3NuLtCg0LXQutCy0J3QvtC80LXRgNCU0L7QugogICAgICAgICAgICAkY29udHJhY3REYXRlID0gQ29udmVydC1Eb3REYXRlIChbc3RyaW5nXSRvc24u0KDQtdC60LLQlNCw0YLQsNCU0L7QuikKICAgICAgICB9"
+	+ "CiAgICB9CiAgICAkZG9jSWQgPSAiIgogICAgdHJ5IHsKICAgICAgICBmb3JlYWNoICgkaW5mbyBpbiBAKCRzZi7QmNC90YTQn9C+0LvQpNCl0JYxLtCi0LXQutGB0YLQmNC90YQpKSB7CiAgICAgICAgICAgIGlmIChbc3RyaW5nXSRpbmZv"
+	+ "LtCY0LTQtdC90YLQuNGEIC1lcSAi0JjQtNC10L3RgtC40YTQuNC60LDRgtC+0YDQlNC+0LrRg9C80LXQvdGC0LDQntGB0L3QvtCy0LDQvdC40Y8iKSB7CiAgICAgICAgICAgICAgICAkZG9jSWQgPSBbc3RyaW5nXSRpbmZvLtCX0L3QsNGH"
+	+ "0LXQvQogICAgICAgICAgICB9CiAgICAgICAgfQogICAgfSBjYXRjaCB7fQogICAgJHBheU5vID0gIiIKICAgICRwYXlEYXRlID0gIiIKICAgIHRyeSB7CiAgICAgICAgJHBheSA9IEAoJHNmLtCh0LLQn9Cg0JQpIHwgU2VsZWN0LU9iamVj"
+	+ "dCAtRmlyc3QgMQogICAgICAgIGlmICgkcGF5KSB7CiAgICAgICAgICAgICRwYXlObyA9IFtzdHJpbmddJHBheS7QndC+0LzQtdGA0J/QoNCUCiAgICAgICAgICAgICRwYXlEYXRlID0gQ29udmVydC1Eb3REYXRlIChbc3RyaW5nXSRwYXku"
+	+ "0JTQsNGC0LDQn9Cg0JQpCiAgICAgICAgfQogICAgfSBjYXRjaCB7fQogICAgcmV0dXJuIFtwc2N1c3RvbW9iamVjdF1AewogICAgICAgINCS0LjQtCA9ICLQo9Cf0JQiCiAgICAgICAg0JjRgdGC0L7Rh9C90LjQuiA9ICJYTUwiCiAgICAg"
+	+ "ICAg0J3QvtC80LXRgCA9IFtzdHJpbmddJHNmLtCd0L7QvNC10YDQlNC+0LoKICAgICAgICDQlNCw0YLQsCA9IChDb252ZXJ0LURvdERhdGUgKFtzdHJpbmddJHNmLtCU0LDRgtCw0JTQvtC6KSkKICAgICAgICDQmNC0ID0gJGRvY0lkCiAg"
+	+ "ICAgICAg0J/QvtGB0YLQsNCy0YnQuNC6ID0gJHNlbGxlcgogICAgICAgINCf0L7QutGD0L/QsNGC0LXQu9GMID0gJGJ1eWVyCiAgICAgICAg0J7RgdC90L7QstCw0L3QuNC1ID0gJGJhc2lzCiAgICAgICAg0JTQvtCz0L7QstC+0YDQndC+"
+	+ "0LzQtdGAID0gJGNvbnRyYWN0Tm8KICAgICAgICDQlNC+0LPQvtCy0L7RgNCU0LDRgtCwID0gJGNvbnRyYWN0RGF0ZQogICAgICAgINCf0LvQsNGC0LXQttC60LDQndC+0LzQtdGAID0gJHBheU5vCiAgICAgICAg0J/Qu9Cw0YLQtdC20LrQ"
+	+ "sNCU0LDRgtCwID0gJHBheURhdGUKICAgICAgICDQkdCw0L3QuiA9ICRiYW5rCiAgICAgICAg0KHRgtGA0L7QutC4ID0gQCgkbGluZXMuVG9BcnJheSgpKQogICAgICAgINCh0YPQvNC80LAgPSBbbWF0aF06OlJvdW5kKCR0b3RhbCwgMikK"
+	+ "ICAgICAgICDQodGC0LDQstC60LDQndCU0KEgPSAkcmF0ZQogICAgICAgINCh0YPQvNC80LDQndCU0KEgPSAkdmF0U3VtCiAgICAgICAg0KHRg9C80LzQsNCS0LrQu9GO0YfQsNC10YLQndCU0KEgPSAkdHJ1ZQogICAgICAgINCf0LDQutC1"
+	+ "0YIgPSAkUGFja2V0CiAgICAgICAg0JjQndCd0J/QsNC/0LrQuCA9ICRGb2xkZXJJbm4KICAgICAgICDQmNC80Y/QpNCw0LnQu9CwID0gW1N5c3RlbS5JTy5QYXRoXTo6R2V0RmlsZU5hbWUoJEZpbGUpCiAgICAgICAg0J/RgNC10LTRg9C/"
+	+ "0YDQtdC20LTQtdC90LjRjyA9IEAoKQogICAgfQp9CgpmdW5jdGlvbiBSZWFkLVBkZkpzb24oW3N0cmluZ10kRmlsZSkgewogICAgJGpzb25QYXRoID0gW1N5c3RlbS5JTy5QYXRoXTo6Q2hhbmdlRXh0ZW5zaW9uKCRGaWxlLCAiLmpzb24i"
+	+ "KQogICAgJiAkRXh0cmFjdFNjcmlwdCAtUGRmUGF0aCAkRmlsZSAtT3V0UGF0aCAkanNvblBhdGgKICAgIGlmICgtbm90IChUZXN0LVBhdGggJGpzb25QYXRoKSkgeyByZXR1cm4gJG51bGwgfQogICAgJHJhdyA9IFtTeXN0ZW0uSU8uRmls"
+	+ "ZV06OlJlYWRBbGxUZXh0KCRqc29uUGF0aCwgW1N5c3RlbS5UZXh0LlVURjhFbmNvZGluZ106Om5ldygkZmFsc2UpKQogICAgcmV0dXJuICRyYXcgfCBDb252ZXJ0RnJvbS1Kc29uCn0KCiR3b3JrID0gSm9pbi1QYXRoIChbU3lzdGVtLklP"
+	+ "LlBhdGhdOjpHZXRUZW1wUGF0aCgpKSAoInpzZGlhZG9jXyIgKyBbZ3VpZF06Ok5ld0d1aWQoKS5Ub1N0cmluZygiTiIpKQpOZXctSXRlbSAtSXRlbVR5cGUgRGlyZWN0b3J5IC1QYXRoICR3b3JrIHwgT3V0LU51bGwKJGRvY3MgPSBOZXct"
+	+ "T2JqZWN0IFN5c3RlbS5Db2xsZWN0aW9ucy5HZW5lcmljLkxpc3Rbb2JqZWN0XQokeG1sS2V5cyA9IEB7fQoKdHJ5IHsKICAgICR6aXAgPSBbU3lzdGVtLklPLkNvbXByZXNzaW9uLlppcEZpbGVdOjpPcGVuUmVhZCgkWmlwUGF0aCkKICAg"
+	+ "IHRyeSB7CiAgICAgICAgJGluZGV4ID0gMAogICAgICAgIGZvcmVhY2ggKCRlbnRyeSBpbiAkemlwLkVudHJpZXMpIHsKICAgICAgICAgICAgaWYgKC1ub3QgJGVudHJ5Lk5hbWUpIHsgY29udGludWUgfQogICAgICAgICAgICAkZnVsbCA9"
+	+ "IFJlcGFpci1aaXBOYW1lICgkZW50cnkuRnVsbE5hbWUuUmVwbGFjZSgiXCIsICIvIikpCiAgICAgICAgICAgICRsZWFmID0gW1N5c3RlbS5JTy5QYXRoXTo6R2V0RmlsZU5hbWUoJGZ1bGwpCiAgICAgICAgICAgICRsb3cgPSAkbGVhZi5U"
+	+ "b0xvd2VyKCkKICAgICAgICAgICAgJGtlZXAgPSAkZmFsc2UKICAgICAgICAgICAgaWYgKCRsb3cgLWxpa2UgIm9uX25zY2hmZG9wcHIqLnhtbCIpIHsgJGtlZXAgPSAkdHJ1ZSB9CiAgICAgICAgICAgIGVsc2VpZiAoJGxvdy5FbmRzV2l0"
+	+ "aCgiLnBkZiIpIC1vciAkbG93LkVuZHNXaXRoKCIuZG9jeCIpIC1vciAkbG93LkVuZHNXaXRoKCIuZG9jIikpIHsKICAgICAgICAgICAgICAgIGlmICgkbG93IC1saWtlICIq0L/RgNC+0YLQvtC60L7QuyoiKSB7ICRrZWVwID0gJGZhbHNl"
+	+ "IH0KICAgICAgICAgICAgICAgIGVsc2VpZiAoJGxvdyAtbGlrZSAi0L/QtdGH0LDRgtC90LDRjyDRhNC+0YDQvNCwKiIpIHsgJGtlZXAgPSAkZmFsc2UgfQogICAgICAgICAgICAgICAgZWxzZSB7ICRrZWVwID0gJHRydWUgfQogICAgICAg"
+	+ "ICAgICB9CiAgICAgICAgICAgIGlmICgtbm90ICRrZWVwKSB7IGNvbnRpbnVlIH0KICAgICAgICAgICAgJGluZGV4KysKICAgICAgICAgICAgJGV4dCA9IFtTeXN0ZW0uSU8uUGF0aF06OkdldEV4dGVuc2lvbigkbGVhZikKICAgICAgICAg"
+	+ "ICAgJHRhcmdldCA9IEpvaW4tUGF0aCAkd29yayAoInswOjAwMDB9ezF9IiAtZiAkaW5kZXgsICRleHQpCiAgICAgICAgICAgICRpbnB1dCA9ICRlbnRyeS5PcGVuKCkKICAgICAgICAgICAgJG91dHB1dCA9IFtTeXN0ZW0uSU8uRmlsZV06"
+	+ "OkNyZWF0ZSgkdGFyZ2V0KQogICAgICAgICAgICB0cnkgeyAkaW5wdXQuQ29weVRvKCRvdXRwdXQpIH0gZmluYWxseSB7ICRvdXRwdXQuRGlzcG9zZSgpOyAkaW5wdXQuRGlzcG9zZSgpIH0KICAgICAgICAgICAgJHBhY2tldCA9IEdldC1Q"
+	+ "YWNrZXQgJGZ1bGwKICAgICAgICAgICAgJGZvbGRlcklubiA9IEdldC1Gb2xkZXJJbm4gJGZ1bGwKICAgICAgICAgICAgaWYgKCRsb3cgLWxpa2UgIm9uX25zY2hmZG9wcHIqLnhtbCIpIHsKICAgICAgICAgICAgICAgIHRyeSB7CiAgICAg"
+	+ "ICAgICAgICAgICAgICAgJHVwZCA9IFJlYWQtVXBkWG1sICR0YXJnZXQgJHBhY2tldCAkZm9sZGVySW5uCiAgICAgICAgICAgICAgICAgICAgJHVwZCB8IEFkZC1NZW1iZXIgLU5vdGVQcm9wZXJ0eU5hbWUg0JjQvNGP0KTQsNC50LvQsCAt"
+	+ "Tm90ZVByb3BlcnR5VmFsdWUgJGxlYWYgLUZvcmNlCiAgICAgICAgICAgICAgICAgICAgJGtleSA9ICgkcGFja2V0ICsgInwiICsgJHVwZC7QndC+0LzQtdGAKS5Ub0xvd2VyKCkKICAgICAgICAgICAgICAgICAgICAkeG1sS2V5c1ska2V5"
+	+ "XSA9ICR0cnVlCiAgICAgICAgICAgICAgICAgICAgJGRvY3MuQWRkKCR1cGQpCiAgICAgICAgICAgICAgICB9IGNhdGNoIHsKICAgICAgICAgICAgICAgICAgICAkZG9jcy5BZGQoW3BzY3VzdG9tb2JqZWN0XUB7INCS0LjQtCA9ICLQn9GA"
+	+ "0L7Rh9C10LUiOyDQmNC80Y/QpNCw0LnQu9CwID0gJGxlYWY7INCf0LDQutC10YIgPSAkcGFja2V0OyDQn9GA0LjRh9C40L3QsCA9ICRfLkV4Y2VwdGlvbi5NZXNzYWdlIH0pCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICBj"
+	+ "b250aW51ZQogICAgICAgICAgICB9CiAgICAgICAgICAgICRraW5kID0gItCf0YDQvtGH0LXQtSIKICAgICAgICAgICAgaWYgKCRsb3cgLW1hdGNoICLRgdGH0LXRglxzKtC90LBccyrQvtC/0LvQsNGC0YN80YHRh9GR0YJccyrQvdCwXHMq"
+	+ "0L7Qv9C70LDRgtGDIikgeyAka2luZCA9ICLQodGH0LXRgiIgfQogICAgICAgICAgICBlbHNlaWYgKCRsb3cgLW1hdGNoICLRg9C/0LR80YHRh9C10YIt0YTQsNC60YLRg9GA0LB80YHRh9GR0YIt0YTQsNC60YLRg9GA0LB80YHRh9GE0LTQ"
+	+ "vtC/IikgeyAka2luZCA9ICLQo9Cf0JQiIH0KICAgICAgICAgICAgZWxzZWlmICgkbG93IC1tYXRjaCAi0LTQvtCz0L7QstC+0YB80LTQvtCzXyIpIHsgJGtpbmQgPSAi0JTQvtCz0L7QstC+0YAiIH0KICAgICAgICAgICAgZWxzZWlmICgk"
+	+ "bG93IC1tYXRjaCAi0LDQutGCXHMq0YHQstC10YDQutC4IikgeyAka2luZCA9ICLQkNC60YLQodCy0LXRgNC60LgiIH0KICAgICAgICAgICAgZWxzZWlmICgkbG93IC1tYXRjaCAi0LTQvtCy0LXRgNC10L0iKSB7ICRraW5kID0gItCU0L7Q"
+	+ "stC10YDQtdC90L3QvtGB0YLRjCIgfQogICAgICAgICAgICBlbHNlaWYgKCRsb3cgLW1hdGNoICLQt9Cw0Y/QstC6IikgeyAka2luZCA9ICLQl9Cw0Y/QstC60LAiIH0KICAgICAgICAgICAgZWxzZWlmICgkbG93IC1tYXRjaCAi0L/QuNGB"
+	+ "0YzQvCIpIHsgJGtpbmQgPSAi0J/QuNGB0YzQvNC+IiB9CiAgICAgICAgICAgIGVsc2VpZiAoJGxvdyAtbWF0Y2ggItCw0LrRgiIpIHsgJGtpbmQgPSAi0JDQutGCIiB9CgogICAgICAgICAgICBpZiAoJGtpbmQgLWVxICLQodGH0LXRgiIg"
+	+ "LW9yICRraW5kIC1lcSAi0KPQn9CUIiAtb3IgJGtpbmQgLWVxICLQkNC60YIiKSB7CiAgICAgICAgICAgICAgICBpZiAoLW5vdCAkbG93LkVuZHNXaXRoKCIucGRmIikpIHsKICAgICAgICAgICAgICAgICAgICAkZG9jcy5BZGQoW3BzY3Vz"
+	+ "dG9tb2JqZWN0XUB7INCS0LjQtCA9ICLQn9GA0L7Rh9C10LUiOyDQmNC80Y/QpNCw0LnQu9CwID0gJGxlYWY7INCf0LDQutC10YIgPSAkcGFja2V0OyDQmNCd0J3Qn9Cw0L/QutC4ID0gJGZvbGRlcklubjsg0J/RgNC40YfQuNC90LAgPSAi"
+	+ "0KTQsNC50Lsg0L3QtSBQREYsINCyINGD0YfQtdGCINC90LUg0L/RgNC+0LLQvtC00LjRgtGB0Y8uIiB9KQogICAgICAgICAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICB0cnkgewogICAg"
+	+ "ICAgICAgICAgICAgICAgICRwYXJzZWQgPSBSZWFkLVBkZkpzb24gJHRhcmdldAogICAgICAgICAgICAgICAgfSBjYXRjaCB7CiAgICAgICAgICAgICAgICAgICAgJHBhcnNlZCA9ICRudWxsCiAgICAgICAgICAgICAgICB9CiAgICAgICAg"
+	+ "ICAgICAgICBpZiAoJG51bGwgLWVxICRwYXJzZWQpIHsKICAgICAgICAgICAgICAgICAgICAkZG9jcy5BZGQoW3BzY3VzdG9tb2JqZWN0XUB7INCS0LjQtCA9ICLQn9GA0L7Rh9C10LUiOyDQmNC80Y/QpNCw0LnQu9CwID0gJGxlYWY7INCf"
+	+ "0LDQutC10YIgPSAkcGFja2V0OyDQn9GA0LjRh9C40L3QsCA9ICJQREYg0L3QtSDRgNCw0LfQvtCx0YDQsNC9LiIgfSkKICAgICAgICAgICAgICAgICAgICBjb250aW51ZQogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgJHBh"
+	+ "cnNlZCB8IEFkZC1NZW1iZXIgLU5vdGVQcm9wZXJ0eU5hbWUg0JjRgdGC0L7Rh9C90LjQuiAtTm90ZVByb3BlcnR5VmFsdWUgIlBERiIgLUZvcmNlCiAgICAgICAgICAgICAgICAkcGFyc2VkIHwgQWRkLU1lbWJlciAtTm90ZVByb3BlcnR5"
+	+ "TmFtZSDQn9Cw0LrQtdGCIC1Ob3RlUHJvcGVydHlWYWx1ZSAkcGFja2V0IC1Gb3JjZQogICAgICAgICAgICAgICAgJHBhcnNlZCB8IEFkZC1NZW1iZXIgLU5vdGVQcm9wZXJ0eU5hbWUg0JjQndCd0J/QsNC/0LrQuCAtTm90ZVByb3BlcnR5"
+	+ "VmFsdWUgJGZvbGRlcklubiAtRm9yY2UKICAgICAgICAgICAgICAgICRwYXJzZWQgfCBBZGQtTWVtYmVyIC1Ob3RlUHJvcGVydHlOYW1lINCY0LzRj9Ck0LDQudC70LAgLU5vdGVQcm9wZXJ0eVZhbHVlICRsZWFmIC1Gb3JjZQogICAgICAg"
+	+ "ICAgICAgICAgJHBhcnNlZCB8IEFkZC1NZW1iZXIgLU5vdGVQcm9wZXJ0eU5hbWUg0JjQtCAtTm90ZVByb3BlcnR5VmFsdWUgIiIgLUZvcmNlCiAgICAgICAgICAgICAgICAkcGFyc2VkIHwgQWRkLU1lbWJlciAtTm90ZVByb3BlcnR5TmFt"
+	+ "ZSDQn9C70LDRgtC10LbQutCw0J3QvtC80LXRgCAtTm90ZVByb3BlcnR5VmFsdWUgIiIgLUZvcmNlCiAgICAgICAgICAgICAgICAkcGFyc2VkIHwgQWRkLU1lbWJlciAtTm90ZVByb3BlcnR5TmFtZSDQn9C70LDRgtC10LbQutCw0JTQsNGC"
+	+ "0LAgLU5vdGVQcm9wZXJ0eVZhbHVlICIiIC1Gb3JjZQogICAgICAgICAgICAgICAgaWYgKCRwYXJzZWQu0J7RiNC40LHQutCwKSB7CiAgICAgICAgICAgICAgICAgICAgJHBhcnNlZC7QktC40LQgPSAi0J/RgNC+0YfQtdC1IgogICAgICAg"
+	+ "ICAgICAgICAgICAgICRwYXJzZWQgfCBBZGQtTWVtYmVyIC1Ob3RlUHJvcGVydHlOYW1lINCf0YDQuNGH0LjQvdCwIC1Ob3RlUHJvcGVydHlWYWx1ZSAoW3N0cmluZ10kcGFyc2VkLtCe0YjQuNCx0LrQsCkgLUZvcmNlCiAgICAgICAgICAg"
+	+ "ICAgICB9IGVsc2VpZiAoJGtpbmQgLWVxICLQkNC60YIiIC1hbmQgW3N0cmluZ10kcGFyc2VkLtCS0LjQtCAtbmUgItCj0J/QlCIgLWFuZCBbc3RyaW5nXSRwYXJzZWQu0JLQuNC0IC1uZSAi0KHRh9C10YIiKSB7CiAgICAgICAgICAgICAg"
+	+ "ICAgICAgJHBhcnNlZC7QktC40LQgPSAi0J/RgNC+0YfQtdC1IgogICAgICAgICAgICAgICAgICAgICRwYXJzZWQgfCBBZGQtTWVtYmVyIC1Ob3RlUHJvcGVydHlOYW1lINCf0YDQuNGH0LjQvdCwIC1Ob3RlUHJvcGVydHlWYWx1ZSAi0JDQ"
+	+ "utGCINCx0LXQtyDQo9Cf0JQg0Lgg0YHRh9C10YLQsCwg0LIg0YPRh9C10YIg0L3QtSDQv9GA0L7QstC+0LTQuNGC0YHRjy4iIC1Gb3JjZQogICAgICAgICAgICAgICAgfQogICAgICAgICAgICAgICAgJGRvY3MuQWRkKCRwYXJzZWQpCiAg"
+	+ "ICAgICAgICAgICAgICBjb250aW51ZQogICAgICAgICAgICB9CgogICAgICAgICAgICAkdGl0bGUgPSBbU3lzdGVtLklPLlBhdGhdOjpHZXRGaWxlTmFtZVdpdGhvdXRFeHRlbnNpb24oJGxlYWYpCiAgICAgICAgICAgICRkb2NzLkFkZChb"
+	+ "cHNjdXN0b21vYmplY3RdQHsKICAgICAgICAgICAgICAgINCS0LjQtCA9ICRraW5kCiAgICAgICAgICAgICAgICDQmNC80Y/QpNCw0LnQu9CwID0gJGxlYWYKICAgICAgICAgICAgICAgINCd0LDQuNC80LXQvdC+0LLQsNC90LjQtSA9ICR0"
+	+ "aXRsZQogICAgICAgICAgICAgICAg0J/QsNC60LXRgiA9ICRwYWNrZXQKICAgICAgICAgICAgICAgINCY0J3QndCf0LDQv9C60LggPSAkZm9sZGVySW5uCiAgICAgICAgICAgICAgICDQntGB0L3QvtCy0LDQvdC40LUgPSAkdGl0bGUKICAg"
+	+ "ICAgICAgICAgICAgINCf0YDQuNGH0LjQvdCwID0gJChpZiAoJGtpbmQgLWVxICLQlNC+0LPQvtCy0L7RgCIpIHsgIiIgfSBlbHNlIHsgItCSINGD0YfQtdGC0L3Ri9C1INC00L7QutGD0LzQtdC90YLRiyDQvdC1INC/0YDQvtCy0L7QtNC4"
+	+ "0YLRgdGPLiIgfSkKICAgICAgICAgICAgfSkKICAgICAgICB9CiAgICB9IGZpbmFsbHkgewogICAgICAgICR6aXAuRGlzcG9zZSgpCiAgICB9CgogICAgJGZpbHRlcmVkID0gTmV3LU9iamVjdCBTeXN0ZW0uQ29sbGVjdGlvbnMuR2VuZXJp"
+	+ "Yy5MaXN0W29iamVjdF0KICAgIGZvcmVhY2ggKCRkb2MgaW4gJGRvY3MpIHsKICAgICAgICBpZiAoW3N0cmluZ10kZG9jLtCY0YHRgtC+0YfQvdC40LogLWVxICJQREYiIC1hbmQgW3N0cmluZ10kZG9jLtCS0LjQtCAtZXEgItCj0J/QlCIp"
+	+ "IHsKICAgICAgICAgICAgJGtleSA9IChbc3RyaW5nXSRkb2Mu0J/QsNC60LXRgiArICJ8IiArIFtzdHJpbmddJGRvYy7QndC+0LzQtdGAKS5Ub0xvd2VyKCkKICAgICAgICAgICAgaWYgKCR4bWxLZXlzLkNvbnRhaW5zS2V5KCRrZXkpKSB7"
+	+ "IGNvbnRpbnVlIH0KICAgICAgICB9CiAgICAgICAgJGZpbHRlcmVkLkFkZCgkZG9jKQogICAgfQogICAgV3JpdGUtUmVzdWx0IEB7INCU0L7QutGD0LzQtdC90YLRiyA9IEAoJGZpbHRlcmVkLlRvQXJyYXkoKSkgfQp9IGNhdGNoIHsKICAg"
+	+ "IFdyaXRlLVJlc3VsdCBAeyDQntGI0LjQsdC60LAgPSAoItCd0LUg0YPQtNCw0LvQvtGB0Ywg0L/RgNC+0YfQuNGC0LDRgtGMINCw0YDRhdC40LIg0JTQuNCw0LTQvtC60LA6ICIgKyAkXy5FeGNlcHRpb24uTWVzc2FnZSkgfQp9IGZpbmFs"
+	+ "bHkgewogICAgaWYgKFRlc3QtUGF0aCAkd29yaykgeyBSZW1vdmUtSXRlbSAkd29yayAtUmVjdXJzZSAtRm9yY2UgLUVycm9yQWN0aW9uIFNpbGVudGx5Q29udGludWUgfQp9Cg=="
+	;
+
+	Возврат ПолучитьСтрокуИзДвоичныхДанных(Base64Значение(Б64), КодировкаТекста.UTF8);
+
+КонецФункции
+
 Функция НайтиСуществующий(ИмяДокумента, НомерИзФайла, ДатаДок, Контрагент)
 
 	Если Метаданные.Документы.Найти(ИмяДокумента) = Неопределено Тогда
@@ -387,9 +890,15 @@
 Процедура УдалитьВременные(ПутьPDF, ПутьPS, ПутьJSON)
 
 	Попытка
-		УдалитьФайлы(ПутьPDF);
-		УдалитьФайлы(ПутьPS);
-		УдалитьФайлы(ПутьJSON);
+		Если ЗначениеЗаполнено(ПутьPDF) Тогда
+			УдалитьФайлы(ПутьPDF);
+		КонецЕсли;
+		Если ЗначениеЗаполнено(ПутьPS) Тогда
+			УдалитьФайлы(ПутьPS);
+		КонецЕсли;
+		Если ЗначениеЗаполнено(ПутьJSON) Тогда
+			УдалитьФайлы(ПутьJSON);
+		КонецЕсли;
 	Исключение
 		Возврат;
 	КонецПопытки;
